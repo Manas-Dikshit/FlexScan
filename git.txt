@@ -1,0 +1,62 @@
+git add .env.example
+git commit -m "Add environment configuration example"
+
+git add .gitignore
+git commit -m "Add Git ignore rules"
+
+git add requirements.txt
+git commit -m "Add project dependencies"
+
+git add README.md
+git commit -m "Add project documentation"
+
+git add tree.txt
+git commit -m "Add project structure documentation"
+
+git add download_models.py
+git commit -m "Add model download utility"
+
+git add main.py
+git commit -m "Add FlexScan application entry point"
+
+git add app/__init__.py
+git commit -m "Initialize application package"
+
+git add app/config.py
+git commit -m "Add application configuration"
+
+git add app/camera.py
+git commit -m "Add camera capture module"
+
+git add app/pose.py
+git commit -m "Add pose detection module"
+
+git add app/segmentation.py
+git commit -m "Add body segmentation module"
+
+git add app/arm_analysis.py
+git commit -m "Add arm analysis module"
+
+git add app/scoring.py
+git commit -m "Add posture scoring module"
+
+git add app/state.py
+git commit -m "Add application state management"
+
+git add app/ui.py
+git commit -m "Add FlexScan user interface"
+
+git add tests/__init__.py
+git commit -m "Initialize test package"
+
+git add tests/test_analysis.py
+git commit -m "Add analysis tests"
+
+git add tests/test_scoring.py
+git commit -m "Add scoring tests"
+
+git add models/yolov8n-pose.pt
+git commit -m "Add YOLOv8 pose model"
+
+git add models/yolov8n-seg.pt
+git commit -m "Add YOLOv8 segmentation model"
