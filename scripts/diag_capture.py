@@ -7,7 +7,16 @@ import cv2
 
 from app.camera import Camera
 from app.pose import PoseDetector
-from app.arm_analysis import analyze_frame, build_arm_region, segment_arm_region, measure_slice_widths, normalize_illumination
+from app.arm_analysis import (
+    analyze_frame,
+    build_arm_region,
+    segment_arm_region,
+    measure_slice_widths,
+    measure_definition,
+    measure_shape,
+    measure_curvature,
+    normalize_illumination,
+)
 from app.state import ScanSession, ScanState
 
 
@@ -26,22 +35,23 @@ def main():
             arm = pose.arms.get("right") or pose.arms.get("left")
             if arm is None:
                 continue
+            box = session._person_box(pose, frame.shape[:2])
             work = normalize_illumination(frame)
             region = build_arm_region(work, arm)
             if region is None:
                 reasons["no region"] = reasons.get("no region", 0) + 1
                 continue
-            mask = segment_arm_region(work, region, session._person_box(pose, frame.shape[:2]))
+            mask = segment_arm_region(work, region, box)
             if mask is not None:
                 for name, src in (("norm", work), ("raw", frame)):
                     gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
                     roi = cv2.bitwise_and(gray, gray, mask=mask)
                     nonz = roi[roi > 0]
                     if nonz.size:
+                        msum = int(mask.sum() // 255)
                         print(f"i={i} {name} roi lum mean={round(float(nonz.mean()),1)} "
-                              f"min={int(nonz.min())} max={int(nonz.max())} "
-                              f"mask_px={int(mask.sum()//255)}")
-            meas = analyze_frame(frame, arm, None, session._person_box(pose, frame.shape[:2]))
+                              f"min={int(nonz.min())} max={int(nonz.max())} mask_px={msum}")
+            meas = analyze_frame(frame, arm, None, box)
             reason = meas.reason or "OK"
             reasons[reason] = reasons.get(reason, 0) + 1
             if meas.reliable:
@@ -51,7 +61,7 @@ def main():
                     break
 
         print("reason counts:", reasons)
-        print("arm_side:", session.arm_side, "reference_cm:", session.reference_cm)
+        print("reference_cm:", session.reference_cm)
 
         # diagnose one full unrolled pass on a fresh frame
         frame = cam.read()
@@ -59,18 +69,30 @@ def main():
         arm = pose.arms.get("right") or pose.arms.get("left")
         print("person_detected:", pose.person_detected, "arms:", list(pose.arms.keys()))
         if arm is None:
-            print("no usable arm (conf/low length). confs:", pose.upper_body.confidences)
+            print("no usable arm. confs:", pose.upper_body.confidences)
             return
-        from app.arm_analysis import measure_definition, measure_shape, measure_curvature
+        box = session._person_box(pose, frame.shape[:2])
+        work = normalize_illumination(frame)
+        region = build_arm_region(work, arm)
+        print("region:", "None" if region is None else (len(region.slices), round(region.arm_length, 1)))
+        if region is None:
+            return
+        print("person_box:", box)
+        mask = segment_arm_region(work, region, box)
+        print("mask:", "None" if mask is None else (mask.dtype, mask.shape, int(mask.sum() // 255)))
+        if mask is not None:
             slices = measure_slice_widths(mask, region)
-            print("slices:", None if not slices else len(slices), "nonempty:", sum(1 for s in slices if s.width_px > 0))
+            print("slices:", None if not slices else len(slices),
+                  "nonempty:", sum(1 for s in slices if s.width_px > 0))
             if slices:
-                widths = [s.width_px for s in slices]
-                nonempty = [w for w in widths if w > 0]
-                print("width px nonempty min/max/mean:", \
-                    round(min(nonempty), 1), round(max(nonempty), 1), round(float(sum(nonempty) / len(nonempty)), 1))
-                print("norm peak_bulge:", round(max(w / region.arm_length for w in nonempty), 3))
-            print("definition:", measure_definition(work, mask), "shape:", measure_shape(mask),
+                widths = [s.width_px for s in slices if s.width_px > 0]
+                if widths:
+                    print("width px min/max/mean:",
+                          round(min(widths), 1), round(max(widths), 1),
+                          round(float(sum(widths) / len(widths)), 1))
+                    print("norm peak_bulge:", round(max(w / region.arm_length for w in widths), 3))
+            print("definition:", measure_definition(work, mask),
+                  "shape:", measure_shape(mask),
                   "curvature:", measure_curvature(slices, region.arm_length))
 
         meas = analyze_frame(frame, arm, None, box)
