@@ -46,7 +46,7 @@ class ScanSession:
     current_arm_region: Optional[ArmRegion] = None
 
     phase_started_at: float = field(default_factory=time.time)
-    recent_elbow_positions: Deque = field(default_factory=lambda: deque(maxlen=config.STABILITY_WINDOW))
+    recent_arm_pose: Deque = field(default_factory=lambda: deque(maxlen=config.STABILITY_WINDOW))
     last_error: str = ""
 
     # -- lifecycle -----------------------------------------------------
@@ -62,18 +62,26 @@ class ScanSession:
     def _enter(self, new_state: ScanState) -> None:
         self.state = new_state
         self.phase_started_at = time.time()
-        self.recent_elbow_positions.clear()
+        self.recent_arm_pose.clear()
 
     def _phase_timed_out(self) -> bool:
         return (time.time() - self.phase_started_at) > config.SCAN_TIMEOUT_SECONDS
 
-    def is_arm_stable(self, elbow_xy) -> bool:
-        self.recent_elbow_positions.append(elbow_xy)
-        if len(self.recent_elbow_positions) < config.STABILITY_WINDOW:
+    def is_arm_stable(self, arm: ArmPose) -> bool:
+        self.recent_arm_pose.append((arm.elbow, arm.shoulder, arm.upper_arm_length))
+        if len(self.recent_arm_pose) < config.STABILITY_WINDOW:
             return False
-        pts = np.array(self.recent_elbow_positions)
-        spread = np.linalg.norm(pts.max(axis=0) - pts.min(axis=0))
-        return spread <= config.STABILITY_TOLERANCE_PX
+        elbows = np.array([e for e, _, _ in self.recent_arm_pose])
+        shoulders = np.array([s for _, s, _ in self.recent_arm_pose])
+        lengths = [l for _, _, l in self.recent_arm_pose]
+        elbow_spread = np.linalg.norm(elbows.max(axis=0) - elbows.min(axis=0))
+        shoulder_spread = np.linalg.norm(shoulders.max(axis=0) - shoulders.min(axis=0))
+        length_jitter = (max(lengths) - min(lengths)) / max(1e-3, float(np.median(lengths)))
+        return (
+            elbow_spread <= config.STABILITY_TOLERANCE_PX
+            and shoulder_spread <= config.STABILITY_TOLERANCE_PX * 1.5
+            and length_jitter <= config.ARM_LENGTH_JITTER_FRACTION
+        )
 
     def _select_arm(self, pose: PoseResult) -> Optional[ArmPose]:
         if self.arm_side and self.arm_side in pose.arms:
