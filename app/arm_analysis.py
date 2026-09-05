@@ -49,7 +49,44 @@ class FrameMeasurement:
     width_profile: Optional[List[float]]  # normalized widths at each slice position
     reliable: bool
     reason: str = ""
-    arm_length: Optional[float] = None   # shoulder-to-elbow pixels, for phase guards
+    arm_length: Optional[float] = None              # shoulder-to-elbow pixels
+    widths_cm: Optional[List[float]] = None         # per-slice widths in cm (calibrated)
+
+
+# ---------------------------------------------------------------------------
+# Illumination normalization (OpenCV fallback preprocessing)
+# ---------------------------------------------------------------------------
+def normalize_illumination(frame: np.ndarray) -> np.ndarray:
+    """
+    Normalize uneven illumination with CLAHE on the L channel.
+    This is pure OpenCV preprocessing: makes the rest of the pipeline less
+    sensitive to shadows and strong side lighting.
+    """
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(
+        clipLimit=config.CLAHE_CLIP_LIMIT,
+        tileGridSize=(config.CLAHE_TILE_SIZE, config.CLAHE_TILE_SIZE),
+    )
+    l = clahe.apply(l)
+    lab = cv2.merge([l, a, b])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
+def widths_to_cm(
+    widths_px: List[float],
+    reference_cm: Optional[float],
+    arm_length_px: float,
+) -> Optional[List[float]]:
+    """
+    Convert pixel cross-section widths to estimated cm using the user-provided
+    upper-arm length. Assumes the arm is roughly parallel to the camera plane
+    (documented approximation); returns None when no reference is available.
+    """
+    if reference_cm and reference_cm > 0 and arm_length_px > 1e-3:
+        px_per_cm = arm_length_px / float(reference_cm)
+        return [w / px_per_cm for w in widths_px]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -126,19 +163,32 @@ def build_arm_region(frame: np.ndarray, arm: ArmPose) -> Optional[ArmRegion]:
 
 
 # ---------------------------------------------------------------------------
-# Segmentation: YOLOv8-seg model first, then GrabCut fallback
+# Segmentation: matting model, YOLOv8-seg, then GrabCut fallback
 # ---------------------------------------------------------------------------
-def segment_arm_region(frame: np.ndarray, region: ArmRegion) -> Optional[np.ndarray]:
+def segment_arm_region(
+    frame: np.ndarray,
+    region: ArmRegion,
+    person_box: Optional[Tuple[int, int, int, int]] = None,
+) -> Optional[np.ndarray]:
     """
-    Segment the arm using the YOLOv8-seg person model (if available),
-    falling back to GrabCut when the model is not present.
-    Returns a binary mask or None.
+    Segment the arm, trying in order:
+      1. MODNet portrait matting (lighting-robust, soft boundary)
+      2. YOLOv8-seg person mask
+      3. GrabCut seeded with the arm polygon
+    Returns a binary mask or None if all paths fail.
     """
     h, w = frame.shape[:2]
     if h < 8 or w < 8:
         return None
 
-    # Try the segmentation model first
+    try:
+        from app.segmentation import segment_with_matting
+        matte_mask = segment_with_matting(frame, region.polygon, person_box)
+        if matte_mask is not None:
+            return matte_mask
+    except ImportError:
+        pass
+
     try:
         from app.segmentation import segment_with_model
         model_mask = segment_with_model(frame, region.polygon)
