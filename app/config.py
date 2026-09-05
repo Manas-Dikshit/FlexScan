@@ -70,8 +70,17 @@ UPPER_BODY_CONNECTIONS = [
 REQUIRED_STABLE_FRAMES = 10
 STABILITY_WINDOW = 5
 STABILITY_TOLERANCE_PX = 12.0
+ARM_LENGTH_JITTER_FRACTION = 0.15  # max relative arm-length swing considered stable
+MAX_PHASE_GEOMETRY_CHANGE = 0.35   # max relative arm-length change between relaxed/flexed
 SCAN_TIMEOUT_SECONDS = 25
 MIN_ARM_LENGTH_PX = 60
+
+# ---------------------------------------------------------------------------
+# Measurement robustness
+# ---------------------------------------------------------------------------
+MIN_AVG_LUMINANCE = 55      # arm ROI mean gray level; below = too dark
+MAX_AVG_LUMINANCE = 235     # arm ROI mean gray level; above = overexposed
+CANNY_EDGE_SIGMA = 2.5      # auto edge thresholds: mean +/- sigma * std of arm ROI
 
 # ---------------------------------------------------------------------------
 # Arm region of interest

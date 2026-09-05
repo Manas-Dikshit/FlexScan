@@ -49,6 +49,7 @@ class FrameMeasurement:
     width_profile: Optional[List[float]]  # normalized widths at each slice position
     reliable: bool
     reason: str = ""
+    arm_length: Optional[float] = None   # shoulder-to-elbow pixels, for phase guards
 
 
 # ---------------------------------------------------------------------------
@@ -230,11 +231,19 @@ def measure_slice_widths(mask: np.ndarray, region: ArmRegion) -> List[ArmSlice]:
 
 
 def measure_definition(frame: np.ndarray, mask: np.ndarray) -> Optional[float]:
-    """Edge density inside the masked arm region."""
+    """Edge density inside the masked arm region, with lighting-adaptive thresholds."""
     if mask.sum() == 0:
         return None
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 60, 150)
+    masked = cv2.bitwise_and(gray, gray, mask=mask)
+    mean_lum = float(masked.mean())
+    sigma = float(masked.std())
+    lo = int(max(0.0, mean_lum - config.CANNY_EDGE_SIGMA * sigma))
+    hi = int(min(255.0, mean_lum + config.CANNY_EDGE_SIGMA * sigma))
+    if hi - lo < 1:
+        hi = min(255, lo + 1)
+    lo = max(1, lo)
+    edges = cv2.Canny(gray, lo, hi)
     edges_in_mask = cv2.bitwise_and(edges, edges, mask=mask)
     mask_area = int((mask > 0).sum())
     if mask_area == 0:
@@ -321,6 +330,16 @@ def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
     arm_length = region.arm_length
     norm_widths = [w / arm_length for w in widths]
     peak_bulge = max(norm_widths)
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    roi_lum = float(cv2.bitwise_and(gray, gray, mask=mask).mean())
+    if not (config.MIN_AVG_LUMINANCE <= roi_lum <= config.MAX_AVG_LUMINANCE):
+        return FrameMeasurement(
+            peak_bulge=None, definition=None, shape=None, curvature=None,
+            width_profile=norm_widths, reliable=False,
+            reason="Lighting is too dark or too bright -- reposition or adjust the light.",
+            arm_length=arm_length,
+        )
 
     definition = measure_definition(frame, mask)
     shape = measure_shape(mask)

@@ -111,11 +111,29 @@ class PoseDetector:
 
         result = results[0]
         box_confs = result.boxes.conf.cpu().numpy()
-        best_idx = int(np.argmax(box_confs))
+        kpts_all = result.keypoints.xy.cpu().numpy()
+        kpts_conf_all = result.keypoints.conf.cpu().numpy() if result.keypoints.conf is not None \
+            else None
 
-        kpts_xy = result.keypoints.xy.cpu().numpy()[best_idx]
-        kpts_conf = result.keypoints.conf.cpu().numpy()[best_idx] if result.keypoints.conf is not None \
-            else np.ones(len(kpts_xy))
+        arm_joint_idx = sorted({
+            config.KEYPOINT_INDEX[name]
+            for joints in config.REQUIRED_JOINTS_PER_ARM.values()
+            for name in joints
+        })
+
+        best_idx = 0
+        best_score = -1.0
+        for i in range(kpts_all.shape[0]):
+            confs = kpts_conf_all[i] if kpts_conf_all is not None else np.ones(kpts_all.shape[1])
+            arm_conf = float(np.mean(confs[arm_joint_idx]))
+            score = float(box_confs[i]) * max(arm_conf, 1e-4)
+            if score > best_score:
+                best_score = score
+                best_idx = i
+
+        kpts_xy = kpts_all[best_idx]
+        kpts_conf = kpts_conf_all[best_idx] if kpts_conf_all is not None \
+            else np.ones(kpts_xy.shape[0])
         raw = np.concatenate([kpts_xy, kpts_conf[:, None]], axis=1)
 
         upper_body = UpperBodyLandmarks()
