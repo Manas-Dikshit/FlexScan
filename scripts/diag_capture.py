@@ -7,7 +7,7 @@ import cv2
 
 from app.camera import Camera
 from app.pose import PoseDetector
-from app.arm_analysis import analyze_frame, build_arm_region, segment_arm_region, measure_slice_widths, aggregate_measurements
+from app.arm_analysis import analyze_frame, build_arm_region, segment_arm_region, measure_slice_widths, normalize_illumination
 from app.state import ScanSession, ScanState
 
 
@@ -26,10 +26,22 @@ def main():
             arm = pose.arms.get("right") or pose.arms.get("left")
             if arm is None:
                 continue
-            if session.arm_side is None:
-                session.arm_side = arm.side
-            box = session._person_box(pose, frame.shape[:2])
-            meas = analyze_frame(frame, arm, None, box)
+            work = normalize_illumination(frame)
+            region = build_arm_region(work, arm)
+            if region is None:
+                reasons["no region"] = reasons.get("no region", 0) + 1
+                continue
+            mask = segment_arm_region(work, region, session._person_box(pose, frame.shape[:2]))
+            if mask is not None:
+                for name, src in (("norm", work), ("raw", frame)):
+                    gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
+                    roi = cv2.bitwise_and(gray, gray, mask=mask)
+                    nonz = roi[roi > 0]
+                    if nonz.size:
+                        print(f"i={i} {name} roi lum mean={round(float(nonz.mean()),1)} "
+                              f"min={int(nonz.min())} max={int(nonz.max())} "
+                              f"mask_px={int(mask.sum()//255)}")
+            meas = analyze_frame(frame, arm, None, session._person_box(pose, frame.shape[:2]))
             reason = meas.reason or "OK"
             reasons[reason] = reasons.get(reason, 0) + 1
             if meas.reliable:
