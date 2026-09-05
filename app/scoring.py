@@ -28,10 +28,25 @@ class ComponentScores:
 
 
 @dataclass
+class PhysicalDimensions:
+    """Estimated, not-measured, physical upper-arm widths in cm."""
+    relaxed_max_cm: Optional[float]
+    relaxed_mean_cm: Optional[float]
+    flexed_max_cm: Optional[float]
+    flexed_mean_cm: Optional[float]
+    change_max_cm: Optional[float]
+    change_mean_cm: Optional[float]
+    reference_cm: Optional[float]
+    calibrated: bool
+
+
+@dataclass
 class ScanResult:
     overall_score: Optional[float]
     components: ComponentScores
     advice: List[str]
+    physical: Optional[PhysicalDimensions] = None
+    measurement_note: str = ""
 
 
 def _normalize(value: Optional[float], key: str) -> Optional[float]:
@@ -193,8 +208,60 @@ def generate_advice(components: ComponentScores, overall: Optional[float]) -> Li
     return advice[:3]
 
 
-def score_scan(relaxed: Dict[str, float], flexed: Dict[str, float]) -> ScanResult:
+def score_scan(
+    relaxed: Dict[str, float],
+    flexed: Dict[str, float],
+    reference_cm: Optional[float] = None,
+) -> ScanResult:
     components = compute_component_scores(relaxed, flexed)
     overall = compute_overall_score(components)
     advice = generate_advice(components, overall)
-    return ScanResult(overall_score=overall, components=components, advice=advice)
+    return ScanResult(
+        overall_score=overall,
+        components=components,
+        advice=advice,
+        physical=compute_physical_dimensions(relaxed, flexed, reference_cm),
+        measurement_note=_measurement_note(reference_cm),
+    )
+
+
+def compute_physical_dimensions(
+    relaxed: Dict[str, float],
+    flexed: Dict[str, float],
+    reference_cm: Optional[float] = None,
+) -> PhysicalDimensions:
+    """
+    Estimated cross-section widths from pixel measurements converted with the
+    user's upper-arm length. These are visual estimates, never exact values.
+    """
+    r_max, r_mean = relaxed.get("max_width_cm"), relaxed.get("mean_width_cm")
+    f_max, f_mean = flexed.get("max_width_cm"), flexed.get("mean_width_cm")
+    values = [r_max, r_mean, f_max, f_mean]
+    calibrated = reference_cm is not None and reference_cm > 0 and all(v is not None for v in values)
+    if calibrated:
+        change_max = f_max - r_max
+        change_mean = f_mean - r_mean
+    else:
+        change_max = change_mean = None
+    return PhysicalDimensions(
+        relaxed_max_cm=r_max,
+        relaxed_mean_cm=r_mean,
+        flexed_max_cm=f_max,
+        flexed_mean_cm=f_mean,
+        change_max_cm=change_max,
+        change_mean_cm=change_mean,
+        reference_cm=reference_cm,
+        calibrated=calibrated,
+    )
+
+
+def _measurement_note(reference_cm: Optional[float]) -> str:
+    if reference_cm and reference_cm > 0:
+        return (
+            "Widths are visual estimates scaled from your upper-arm length; "
+            "not medical measurements and not exact circumference."
+        )
+    return (
+        "No arm-length reference was set - only relative scores are shown, "
+        "no estimated widths."
+    )

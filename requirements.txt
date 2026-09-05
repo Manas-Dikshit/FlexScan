@@ -1,5 +1,5 @@
 opencv-python>=4.9,<5
 numpy>=2.1
 ultralytics>=8.2,<9
+huggingface_hub>=0.23
 python-dotenv>=1.0
-onnxruntime>=1.20
