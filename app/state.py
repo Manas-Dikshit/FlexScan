@@ -13,7 +13,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Deque, List, Optional
+from typing import Deque, List, Optional, Tuple
 
 import numpy as np
 
@@ -109,14 +109,34 @@ class ScanSession:
         self.last_error = ""
 
         if self.state == ScanState.RELAXED_SCAN:
-            return self._run_capture_phase(frame, arm, self.relaxed_measurements, is_relaxed=True)
+            return self._run_capture_phase(frame, arm, pose, self.relaxed_measurements, is_relaxed=True)
 
         if self.state == ScanState.FLEX_SCAN:
-            return self._run_capture_phase(frame, arm, self.flexed_measurements, is_relaxed=False)
+            return self._run_capture_phase(frame, arm, pose, self.flexed_measurements, is_relaxed=False)
 
         return "Waiting..."
 
-    def _run_capture_phase(self, frame, arm: ArmPose, buffer: List[FrameMeasurement], is_relaxed: bool) -> str:
+    @staticmethod
+    def _person_box(pose: PoseResult, frame_shape: Tuple[int, int]) -> Optional[Tuple[int, int, int, int]]:
+        """Bounding box around the detected upper-body keypoints (pose + seg together)."""
+        pts = list(pose.upper_body.keypoints.values())
+        if not pts:
+            return None
+        h, w = frame_shape[:2]
+        xs = min(p[0] for p in pts)
+        ys = min(p[1] for p in pts)
+        xe = max(p[0] for p in pts)
+        ye = max(p[1] for p in pts)
+        bw = max(xe - xs, 1.0)
+        bh = max(ye - ys, 1.0)
+        pad_x, pad_y = int(bw * 0.2), int(bh * 0.2)
+        x0 = int(max(0, xs - pad_x))
+        y0 = int(max(0, ys - pad_y))
+        x1 = int(min(w, xe + pad_x))
+        y1 = int(min(h, ye + pad_y))
+        return (x0, y0, max(x1 - x0, 1), max(y1 - y0, 1))
+
+    def _run_capture_phase(self, frame, arm: ArmPose, pose: PoseResult, buffer: List[FrameMeasurement], is_relaxed: bool) -> str:
         if self.arm_side is None:
             self.arm_side = arm.side
 
@@ -133,7 +153,8 @@ class ScanSession:
         self.current_arm_region = build_arm_region(frame, arm)
 
         if len(buffer) < config.REQUIRED_STABLE_FRAMES:
-            measurement = analyze_frame(frame, arm)
+            person_box = self._person_box(pose, frame.shape[:2])
+            measurement = analyze_frame(frame, arm, self.reference_cm, person_box)
             buffer.append(measurement)
 
         if len(buffer) >= config.REQUIRED_STABLE_FRAMES:
