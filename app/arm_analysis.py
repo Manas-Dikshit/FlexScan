@@ -349,7 +349,8 @@ def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
         return FrameMeasurement(
             peak_bulge=None, definition=None, shape=None, curvature=curvature,
             width_profile=norm_widths, reliable=False,
-            reason="One or more features could not be computed."
+            reason="One or more features could not be computed.",
+            arm_length=arm_length,
         )
 
     return FrameMeasurement(
@@ -359,6 +360,7 @@ def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
         curvature=curvature,
         width_profile=norm_widths,
         reliable=True,
+        arm_length=arm_length,
     )
 
 
