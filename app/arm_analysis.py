@@ -393,6 +393,10 @@ def aggregate_measurements(measurements: List[FrameMeasurement]) -> Tuple[Option
         "curvature": robust_median([m.curvature for m in reliable_frames if m.curvature is not None]),
     }
 
+    # Keep the phase geometry so relaxed/flexed consistency can be guarded
+    arm_lengths = [m.arm_length for m in reliable_frames if m.arm_length is not None]
+    aggregated["arm_length"] = robust_median(arm_lengths) if arm_lengths else None
+
     # Aggregate width profiles: median at each slice position
     profiles = [m.width_profile for m in reliable_frames if m.width_profile is not None]
     if profiles and all(len(p) == len(profiles[0]) for p in profiles):
