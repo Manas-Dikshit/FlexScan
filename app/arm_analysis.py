@@ -345,16 +345,26 @@ def measure_curvature(slices: List[ArmSlice], arm_length: float) -> Optional[flo
 # ---------------------------------------------------------------------------
 # Full per-frame pipeline
 # ---------------------------------------------------------------------------
-def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
-    """Full per-frame pipeline: polygon region -> segmentation -> dense measurements."""
-    region = build_arm_region(frame, arm)
+def analyze_frame(
+    frame: np.ndarray,
+    arm: ArmPose,
+    reference_cm: Optional[float] = None,
+    person_box: Optional[Tuple[int, int, int, int]] = None,
+) -> FrameMeasurement:
+    """
+    Full per-frame pipeline: illumination normalization -> polygon region ->
+    segmentation -> dense measurements. When reference_cm is given, slice
+    widths are also converted to estimated centimetres.
+    """
+    work = normalize_illumination(frame)
+    region = build_arm_region(work, arm)
     if region is None:
         return FrameMeasurement(
             peak_bulge=None, definition=None, shape=None, curvature=None,
             width_profile=None, reliable=False, reason="Arm region too small."
         )
 
-    mask = segment_arm_region(frame, region)
+    mask = segment_arm_region(work, region, person_box)
     if mask is None:
         return FrameMeasurement(
             peak_bulge=None, definition=None, shape=None, curvature=None,
@@ -381,7 +391,7 @@ def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
     norm_widths = [w / arm_length for w in widths]
     peak_bulge = max(norm_widths)
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
     roi_lum = float(cv2.bitwise_and(gray, gray, mask=mask).mean())
     if not (config.MIN_AVG_LUMINANCE <= roi_lum <= config.MAX_AVG_LUMINANCE):
         return FrameMeasurement(
@@ -391,7 +401,7 @@ def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
             arm_length=arm_length,
         )
 
-    definition = measure_definition(frame, mask)
+    definition = measure_definition(work, mask)
     shape = measure_shape(mask)
     curvature = measure_curvature(slices, arm_length)
 
@@ -411,6 +421,7 @@ def analyze_frame(frame: np.ndarray, arm: ArmPose) -> FrameMeasurement:
         width_profile=norm_widths,
         reliable=True,
         arm_length=arm_length,
+        widths_cm=widths_to_cm(widths, reference_cm, arm_length),
     )
 
 
