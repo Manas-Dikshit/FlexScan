@@ -11,7 +11,10 @@ things a webcam can actually see - contour width, edge contrast, shape
 compactness, contour curvature, and the change between relaxed and flexed
 frames. It does **not** measure muscle mass, muscle fiber composition, muscle
 architecture, body-fat percentage, exact arm circumference, or anything
-medical or genetic, and it is not a fitness or medical diagnostic tool.
+medical or genetic, and it is not a fitness or medical diagnostic tool. Any
+width shown in centimetres is an **estimated visual measurement** scaled from
+pixels and your reference arm length - never an exact value. Scans that cannot
+be estimated honestly are rejected rather than faked.
 
 ## Features
 
@@ -25,9 +28,17 @@ medical or genetic, and it is not a fitness or medical diagnostic tool.
   small movements and keypoint jitter cannot corrupt a scan
 - Multi-frame capture (10 frames per phase) aggregated with robust median and
   statistical outlier removal; frames with keypoint jumps are discarded
-- Lighting tolerance: edge detection thresholds adapt to the arm region's
-  brightness, and frames that are too dark or overexposed are rejected with a
-  clear reposition message
+- Lighting tolerance: the frame is first run through illumination
+  normalization (CLAHE), edge thresholds adapt to the arm region's brightness,
+  and frames that remain too dark or overexposed are rejected with a clear
+  reposition message
+- Segmentation robustness: the arm is isolated by **MODNet portrait matting**
+  (Apache-2.0, Hugging Face) for a soft, lighting-stable boundary, with
+  YOLOv8-seg and then OpenCV GrabCut as automatic fallbacks
+- **Estimated physical widths**: when you provide your upper-arm length in cm,
+  per-slice pixel widths are converted to centimetres and shown honestly as
+  estimates (max / average, relaxed vs. flexed, flex change); without a
+  reference length only relative scores are shown - nothing is fabricated
 - Distance-normalized measurements: every width is divided by the
   shoulder-to-elbow arm length, so camera distance and arm size do not skew
   the result
@@ -39,6 +50,8 @@ medical or genetic, and it is not a fitness or medical diagnostic tool.
 - Unreliable scans are refused with guidance instead of producing a misleading
   score
 - Runs fully locally after the one-time model download; nothing is uploaded
+- No LLM, no cloud, no custom training - all models are permissive-licensed
+  pretrained weights run on your machine
 
 ## Architecture
 
@@ -47,14 +60,15 @@ Webcam
   -> Pose Detection          (YOLOv8-pose, COCO-17 keypoints)
   -> Person Selection        (highest combined box + arm-joint confidence)
   -> Arm Region              (tapered polygon from shoulder-elbow geometry)
-  -> Segmentation            (YOLOv8-seg when available, else GrabCut)
+  -> Illumination Normalize  (CLAHE on L channel)
+  -> Segmentation            (MODNet matting -> YOLOv8-seg -> GrabCut)
   -> Dense Slice Analysis     (perpendicular cross-sections along the arm)
   -> Reliability Gate         (stability, arm-length consistency, lighting)
   -> Relaxed Scan            (10 stable frames captured)
   -> Flexed Scan             (10 stable frames captured)
   -> Robust Aggregation       (median after IQR outlier removal)
   -> Phase Consistency        (relaxed vs. flexed geometry guard)
-  -> Scoring                 (weighted 1-10 Visual Biceps Score)
+  -> Scoring                 (weighted 1-10 Visual Biceps Score + estimated cm)
 ```
 
 Module layout:
@@ -64,14 +78,14 @@ FlexScan/
 |-- app/
 |   |-- camera.py            webcam open/read/release, error handling
 |   |-- pose.py              YOLOv8-pose wrapper -> person selection and joints
-|   |-- arm_analysis.py      arm polygon, dense slice measurement, reliability gates
-|   |-- segmentation.py      YOLOv8-seg person mask (falls back to GrabCut)
-|   |-- scoring.py           normalization, weighting, rule-based advice
+|   |-- arm_analysis.py      arm polygon, matting/segmentation, illumination, slices, reliability gates
+|   |-- segmentation.py      MODNet matting (ONNX) + YOLOv8-seg person mask (falls back to GrabCut)
+|   |-- scoring.py           normalization, weighting, physical widths, rule-based advice
 |   |-- state.py             scan state machine + stability/timeout logic
 |   |-- ui.py                OpenCV overlay drawing + clickable buttons
 |   |-- config.py            every tunable value lives here
 |-- models/                  downloaded models (git-ignored)
-|-- download_models.py       model download script (via Ultralytics)
+|-- download_models.py       model download script (Ultralytics + Hugging Face)
 |-- main.py                  application entry point
 |-- tests/                   unit tests (no webcam required)
 ```
@@ -99,19 +113,25 @@ pip install -r requirements.txt
 
 ## Model download
 
-FlexScan downloads two models on first run via the Ultralytics package (no
-token or account needed):
+FlexScan downloads three models (no token or account needed):
 
 - **yolov8n-pose.pt** - required, detects the upper-body keypoints
+  (Ultralytics, AGPL-3.0)
 - **yolov8n-seg.pt** - optional, provides a cleaner person mask for more
   reliable arm isolation. When absent, FlexScan falls back to OpenCV GrabCut.
+  (Ultralytics, AGPL-3.0)
+- **modnet_photographic.onnx** - optional, MODNet portrait matting
+  (Apache-2.0, hosted on Hugging Face, `Xenova/modnet`). Gives a soft,
+  lighting-stable arm boundary. When absent, FlexScan uses the seg model and
+  then GrabCut. (No HF token is required.)
 
 ```bash
 python download_models.py
 ```
 
 Models are saved to `models/` and git-ignored. To change the filenames,
-update `MODEL_FILENAME` / `SEG_MODEL_FILENAME` in `app/config.py`.
+update `MODEL_FILENAME`, `SEG_MODEL_FILENAME` and `MATTING_MODEL_FILENAME`
+in `app/config.py`.
 
 ## Running
 
@@ -137,6 +157,23 @@ Keyboard shortcuts: `s` start / scan again, `f` continue to flex, `a` analyze,
 If a phase cannot be captured reliably, FlexScan tells you exactly what is
 wrong - lighting, arm visibility, movement - so you can reposition and try
 again instead of chasing a meaningless number.
+
+### Calibration (estimated physical widths)
+
+At startup FlexScan asks for your **upper-arm length** (shoulder to elbow, in
+cm). That single reference length lets the pixel widths be converted into
+**estimated centimetres** (max / average per phase and the flex change). The
+conversion assumes the arm is roughly parallel to the camera plane, so treat
+the numbers as visual approximations - the UI says "ESTIMATED" and the result
+panel repeats that they are visual estimates, not medical measurements.
+
+You can skip the prompt (the default) to get relative-only scores, or set it
+once instead of typing it each launch:
+
+```bash
+# .env
+FLEXSCAN_UPPER_ARM_LENGTH_CM=35
+```
 
 ## Landmark and measurement approach
 
