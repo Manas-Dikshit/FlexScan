@@ -286,6 +286,8 @@ computer-vision demo - they are not medical or scientific standards.**
 |---|---|
 | Camera not opening | Make sure no other app is using the webcam, and that the OS has granted camera permission. Try a different `FLEXSCAN_CAMERA_INDEX` if you have multiple cameras. |
 | "Pose model not found" | Run `python download_models.py` before `python main.py`. |
+| Matting model not used | FlexScan falls back automatically. Check that `models/modnet_photographic.onnx` exists; re-run `python download_models.py` to fetch it. |
+| Wrong estimated widths | The reference arm length must match your real shoulder-to-elbow length, and you must stay roughly parallel to the camera. These are estimates, not measurements. |
 | Download failure | Check your internet connection. If the model name has changed, update the filenames in `app/config.py`. |
 | Poor lighting / low definition score | Use even, diffuse lighting facing your arm; avoid strong backlight or deep shadows. |
 | Arm not detected | Make sure your shoulder, elbow, and wrist are all visible in frame, and step back so the whole upper arm is in view. |
