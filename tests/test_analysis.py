@@ -184,6 +184,9 @@ def test_aggregate_measurements_medians_cm_widths():
                          arm_length=200.0, widths_cm=[11.0, 12.0, 11.5]),
         FrameMeasurement(0.31, 0.06, 0.71, 0.012, [0.2, 0.3, 0.25], reliable=True,
                          arm_length=200.0, widths_cm=[12.0, 13.0, 12.5]),
+        FrameMeasurement(0.305, 0.055, 0.705, 0.011, [0.2, 0.3, 0.25], reliable=True,
+                         arm_length=200.0, widths_cm=[11.5, 12.5, 12.0]),
+        FrameMeasurement(None, None, None, None, None, reliable=False, reason="seg failed"),
     ]
     aggregate, reliable, _ = aggregate_measurements(frames)
     assert reliable is True
