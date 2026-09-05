@@ -36,6 +36,9 @@ class ScanState(str, Enum):
 class ScanSession:
     state: ScanState = ScanState.READY
     arm_side: Optional[str] = None
+    reference_cm: Optional[float] = (
+        config.UPPER_ARM_LENGTH_CM if config.UPPER_ARM_LENGTH_CM > 0 else None
+    )
 
     relaxed_measurements: List[FrameMeasurement] = field(default_factory=list)
     flexed_measurements: List[FrameMeasurement] = field(default_factory=list)

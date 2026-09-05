@@ -466,4 +466,16 @@ def aggregate_measurements(measurements: List[FrameMeasurement]) -> Tuple[Option
     else:
         aggregated["width_profile"] = None
 
+    # Aggregate physical widths (cm): median per slice, then derive max/mean
+    cm_profiles = [m.widths_cm for m in reliable_frames if m.widths_cm]
+    if cm_profiles and all(len(p) == len(cm_profiles[0]) for p in cm_profiles):
+        cm_arr = np.median(np.array(cm_profiles, dtype=np.float64), axis=0)
+        aggregated["width_profile_cm"] = cm_arr.tolist()
+        aggregated["max_width_cm"] = float(cm_arr.max())
+        aggregated["mean_width_cm"] = float(cm_arr.mean())
+    else:
+        aggregated["width_profile_cm"] = None
+        aggregated["max_width_cm"] = None
+        aggregated["mean_width_cm"] = None
+
     return aggregated, True, ""
