@@ -126,12 +126,16 @@ def _clean_arm_mask(person_mask: np.ndarray, arm_polygon: np.ndarray) -> Optiona
     return arm_mask
 
 
-def segment_with_matting(frame: np.ndarray, arm_polygon: np.ndarray) -> Optional[np.ndarray]:
+def segment_with_matting(
+    frame: np.ndarray,
+    arm_polygon: np.ndarray,
+    person_box: Optional[Tuple[int, int, int, int]] = None,
+) -> Optional[np.ndarray]:
     """
     Use MODNet to estimate the foreground, then intersect with the arm polygon.
     Returns a binary arm mask or None if the model is unavailable/failed.
     """
-    alpha = get_matting_model().matte_crop(frame)
+    alpha = get_matting_model().matte_crop(frame, person_box)
     if alpha is None:
         return None
     binary = (alpha > config.MATTING_THRESHOLD).astype(np.uint8) * 255
