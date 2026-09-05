@@ -1,65 +1,79 @@
-# FlexScan — AI Biceps Visual Analysis
+# FlexScan - AI Biceps Visual Analysis
 
 ## Project overview
 
 FlexScan is a local computer-vision application that watches your upper arm
 through a webcam, first **relaxed** and then **flexed**, and produces a
-**Visual Biceps Score (1–10)** with a few plain-language observations.
+**Visual Biceps Score (1-10)** with a few plain-language observations.
 
 **Important:** FlexScan is a *visual, computer-vision estimate* built from
-things a webcam can actually see — contour width, edge contrast, shape
+things a webcam can actually see - contour width, edge contrast, shape
 compactness, contour curvature, and the change between relaxed and flexed
 frames. It does **not** measure muscle mass, muscle fiber composition, muscle
 architecture, body-fat percentage, exact arm circumference, or anything
-medical/genetic, and it is not a fitness or medical diagnostic tool.
+medical or genetic, and it is not a fitness or medical diagnostic tool.
 
 ## Features
 
 - Live webcam feed with full upper-body skeleton landmarks and analysis-region
   polygon overlay
-- Dense per-slice arm measurements along the shoulder–elbow axis
+- Dense per-slice arm measurements along the shoulder-elbow axis
 - Guided two-phase scan: relaxed capture, then flexed capture
-- Automatic checks for person/arm detection, landmark confidence, and frame
-  stability before any frame is used
-- Multi-frame capture (10 frames per phase) aggregated with robust median /
-  outlier removal
+- Robust person selection: the tracked person is chosen by arm-landmark
+  confidence, not just the raw detection-box score
+- Stability gate that watches the shoulder, elbow, and arm length together, so
+  small movements and keypoint jitter cannot corrupt a scan
+- Multi-frame capture (10 frames per phase) aggregated with robust median and
+  statistical outlier removal; frames with keypoint jumps are discarded
+- Lighting tolerance: edge detection thresholds adapt to the arm region's
+  brightness, and frames that are too dark or overexposed are rejected with a
+  clear reposition message
+- Distance-normalized measurements: every width is divided by the
+  shoulder-to-elbow arm length, so camera distance and arm size do not skew
+  the result
 - Five measured components: **Peak Bulge**, **Flex Response**, **Definition**,
-  **Shape**, **Curvature**, combined into one weighted 1–10 score
-- 1–3 deterministic, rule-based observations (no LLM)
+  **Shape**, **Curvature**, combined into one weighted 1-10 score
+- Flex Response is the median of two real measurements (peak-slice change and
+  full width-profile change); no invented or boosted values are ever used
+- 1-3 deterministic, rule-based observations (no LLM)
+- Unreliable scans are refused with guidance instead of producing a misleading
+  score
 - Runs fully locally after the one-time model download; nothing is uploaded
 
 ## Architecture
 
 ```text
 Webcam
-  → Pose Detection        (YOLOv8-pose, COCO-17 keypoints)
-  → Arm Region             (polygon from shoulder→elbow geometry)
-  → Segmentation           (YOLOv8-seg when available, else GrabCut)
-  → Dense Slice Analysis    (7 perpendicular measurements along the arm)
-  → Relaxed Scan            (10 stable frames captured)
-  → Flexed Scan              (10 stable frames captured)
-  → Comparison                 (relaxed vs. flexed across slice profile)
-  → Score                       (weighted 1–10 Visual Biceps Score)
+  -> Pose Detection          (YOLOv8-pose, COCO-17 keypoints)
+  -> Person Selection        (highest combined box + arm-joint confidence)
+  -> Arm Region              (tapered polygon from shoulder-elbow geometry)
+  -> Segmentation            (YOLOv8-seg when available, else GrabCut)
+  -> Dense Slice Analysis     (perpendicular cross-sections along the arm)
+  -> Reliability Gate         (stability, arm-length consistency, lighting)
+  -> Relaxed Scan            (10 stable frames captured)
+  -> Flexed Scan             (10 stable frames captured)
+  -> Robust Aggregation       (median after IQR outlier removal)
+  -> Phase Consistency        (relaxed vs. flexed geometry guard)
+  -> Scoring                 (weighted 1-10 Visual Biceps Score)
 ```
 
 Module layout:
 
 ```text
 FlexScan/
-├── app/
-│   ├── camera.py            webcam open/read/release, error handling
-│   ├── pose.py               YOLOv8-pose wrapper -> full upper-body skeleton
-│   │                          + shoulder/elbow/wrist per arm
-│   ├── arm_analysis.py        arm polygon, dense slice measurement, feature math
-│   ├── segmentation.py        YOLOv8-seg person mask (falls back to GrabCut)
-│   ├── scoring.py              normalization, weighting, rule-based advice
-│   ├── state.py                 scan state machine + stability/timeout logic
-│   ├── ui.py                     OpenCV overlay drawing + clickable buttons
-│   └── config.py                  every tunable value lives here
-├── models/                 downloaded models (git-ignored)
-├── download_models.py    model download script (via Ultralytics)
-├── main.py               application entry point
-└── tests/                 unit tests (no webcam required)
+|-- app/
+|   |-- camera.py            webcam open/read/release, error handling
+|   |-- pose.py              YOLOv8-pose wrapper -> person selection and joints
+|   |-- arm_analysis.py      arm polygon, dense slice measurement, reliability gates
+|   |-- segmentation.py      YOLOv8-seg person mask (falls back to GrabCut)
+|   |-- scoring.py           normalization, weighting, rule-based advice
+|   |-- state.py             scan state machine + stability/timeout logic
+|   |-- ui.py                OpenCV overlay drawing + clickable buttons
+|   |-- config.py            every tunable value lives here
+|-- models/                  downloaded models (git-ignored)
+|-- download_models.py       model download script (via Ultralytics)
+|-- main.py                  application entry point
+|-- tests/                   unit tests (no webcam required)
 ```
 
 ## Requirements
@@ -88,8 +102,8 @@ pip install -r requirements.txt
 FlexScan downloads two models on first run via the Ultralytics package (no
 token or account needed):
 
-- **yolov8n-pose.pt** — required, detects the upper-body keypoints
-- **yolov8n-seg.pt** — optional, provides a cleaner person mask for more
+- **yolov8n-pose.pt** - required, detects the upper-body keypoints
+- **yolov8n-seg.pt** - optional, provides a cleaner person mask for more
   reliable arm isolation. When absent, FlexScan falls back to OpenCV GrabCut.
 
 ```bash
@@ -109,92 +123,115 @@ python main.py
 
 ```text
 Press 's' (or click "Start Scan")
-  → Relax your arm, hold still until the relaxed frames are captured
-  → Press 'f' (or click "Continue")
-  → Flex your bicep, hold still until the flexed frames are captured
-  → Press 'a' (or click "Analyze")
-  → View your Visual Biceps Score and observations
-  → Press 's' again (or "Scan Again") to repeat, or 'q' to quit
+  -> Relax your arm, hold still until the relaxed frames are captured
+  -> Press 'f' (or click "Continue")
+  -> Flex your bicep, hold still until the flexed frames are captured
+  -> Press 'a' (or click "Analyze")
+  -> View your Visual Biceps Score and observations
+  -> Press 's' again (or "Scan Again") to repeat, or 'q' to quit
 ```
 
 Keyboard shortcuts: `s` start / scan again, `f` continue to flex, `a` analyze,
 `q` quit.
 
+If a phase cannot be captured reliably, FlexScan tells you exactly what is
+wrong - lighting, arm visibility, movement - so you can reposition and try
+again instead of chasing a meaningless number.
+
 ## Landmark and measurement approach
 
-### Pose landmarks
+### Pose landmarks and person selection
 
-YOLOv8-pose returns the standard COCO-17 keypoints. FlexScan uses all
-upper-body landmarks: nose, eyes, ears, shoulders, elbows, wrists, and hips.
-All detected landmarks are drawn on the webcam feed as small dots, and the
-upper-body skeleton connections (shoulder–shoulder, shoulder–elbow,
-elbow–wrist, shoulder–hip, hip–hip) are drawn as connecting lines. The
-actively analyzed arm is highlighted with a thicker, colored skeleton.
+YOLOv8-pose returns the standard COCO-17 keypoints. When several people are in
+frame, FlexScan picks the person whose shoulders, elbows, and wrists carry the
+highest combined landmark confidence (weighted with the detection-box score),
+rather than blindly trusting the largest box. Every upper-body landmark is
+drawn on the feed, and the actively analyzed arm is highlighted with a thicker
+colored skeleton. An arm is only used when its shoulder, elbow, and wrist all
+clear the confidence threshold and the arm length is large enough to measure.
 
 ### Arm region polygon
 
 Instead of a fixed rectangular crop, the upper-arm analysis region is a
-**tapered polygon** derived from the shoulder–elbow geometry. The polygon is
-built around the arm axis (shoulder → elbow) and tapers from a wider
+**tapered polygon** derived from the shoulder-elbow geometry. The polygon is
+built around the arm axis (shoulder to elbow) and tapers from a wider
 mid-bicep belly toward the narrower shoulder and elbow ends, giving a more
 anatomically accurate region. The polygon is shown in real time on the feed.
 
 ### Dense measurement slices
 
 Inside the arm region, multiple **perpendicular cross-section lines** are
-generated along the shoulder–elbow axis. Each slice measures the foreground
+generated along the shoulder-elbow axis. Each slice measures the foreground
 width of the arm at that position, and these are shown as orange measurement
-lines with green edge dots during scanning. These slice widths are normalized
-by arm length (so camera distance doesn't skew the result) and used to derive:
+lines with green edge dots during scanning. Because the slices are anchored to
+the live shoulder-elbow geometry, they follow the actual arm outline even
+when it moves slightly between frames.
 
-- **Peak Bulge** — the maximum normalized arm width (the bicep belly)
-- **Curvature** — how sharply the width profile changes along the arm
-- **Width profile** — the full set of widths used for comparison
+### Distance and size normalization
 
-### Segmentation
+Every raw width is divided by the shoulder-to-elbow arm length before it is
+used or compared. Both a wider camera angle and a physically longer arm are
+factored out of the numbers, so the same arm measured at different distances
+produces consistent results. This normalization is applied per frame, which
+also keeps small distance changes between the relaxed and flexed phases from
+skewing the comparison.
 
-The arm is segmented from the background using a YOLOv8-seg person mask
-intersected with the arm polygon. When the segmentation model is not
-available, OpenCV GrabCut is used as a fallback, seeded with the polygon
-region.
+## Robustness details
+
+- **Person selection** - the tracked person maximizes box score times the mean
+  confidence of the eight shoulder/elbow/wrist keypoints (`app/pose.py`).
+- **Stability gate** - a frame is only used when the elbow and shoulder have
+  stayed within a small pixel window and the arm length has not drifted by
+  more than 15% over the last five frames (`app/state.py`).
+- **Keypoint-jump rejection** - a stable frame whose arm length jumps well
+  away from the phase median is skipped, because a mis-detected keypoint can
+  otherwise distort one of the ten capture frames.
+- **Outlier aggregation** - each component is aggregated with the median after
+  discarding 1.5 x IQR outliers; width profiles are medians per slice position.
+- **Lighting tolerance** - edge thresholds are derived from the arm region's
+  mean and standard deviation (`CANNY_EDGE_SIGMA`), and any frame whose arm
+  pixels average too dark or too bright is rejected as unreliable.
+- **Phase consistency guard** - if the arm length changed by more than 35%
+  between the relaxed and flexed phases, the user moved relative to the
+  camera, so the Flex Response component is marked unreliable rather than
+  guessed.
+- **Honest numbers** - no component is ever boosted, invented, or estimated.
+  Flex Response is the median of the peak-slice change and the full-profile
+  change, both real measurements.
 
 ## Scoring methodology
 
-Each captured frame is analyzed across the dense slice measurements:
-
-- **Peak Bulge** — the maximum cross-section width of the segmented arm,
-  normalized by shoulder-to-elbow length
-- **Flex Response** — the change in peak bulge (and the full width profile)
-  between flexed and relaxed captures; profile-based change boosts robustness
-- **Definition** — edge/contrast density inside the segmented arm region
-- **Shape** — contour solidity (area vs. convex-hull area) of the flexed arm
-- **Curvature** — mean absolute second derivative of the normalized width
+- **Peak Bulge** - the maximum cross-section width of the segmented arm,
+  normalized by shoulder-to-elbow length (from the flexed phase)
+- **Flex Response** - the median of (a) the change in peak bulge and (b) the
+  median change across the whole width profile, both between flexed and
+  relaxed and both normalized by arm length
+- **Definition** - lighting-adaptive edge density inside the segmented arm
+  region
+- **Shape** - contour solidity (area vs. convex-hull area) of the flexed arm
+- **Curvature** - mean absolute second derivative of the normalized width
   profile, capturing the bicep peak's sharpness
 
-Ten frames are captured per phase; each feature is aggregated across frames
-using the median after discarding statistical outliers, so a single bad frame
-can't swing the result. Width profiles are also medians across frames at each
-slice position.
-
-Each raw measurement is mapped onto a 1–10 scale using fixed, documented
+Each raw measurement is mapped onto a 1-10 scale using fixed, documented
 ranges (`app/config.py: NORMALIZATION_RANGES`), then combined with these
 weights into the overall score:
 
 | Component       | Weight |
-|------------------|-------:|
-| Peak Bulge        |    25% |
-| Flex Response      |   30% |
-| Definition          |  20% |
-| Shape/Contour        | 15% |
-| Curvature           |  10% |
+|-----------------|-------:|
+| Peak Bulge      |    25% |
+| Flex Response   |    30% |
+| Definition      |    20% |
+| Shape/Contour   |    15% |
+| Curvature       |    10% |
 
-If a component cannot be measured reliably (e.g. bad segmentation), it is
-excluded and the remaining weights are renormalized. If too much is
-unreliable, FlexScan shows **"Unable to obtain a reliable scan — adjust
-position/lighting and try again."** instead of producing a misleading score.
+If a component cannot be measured reliably (bad segmentation, changed camera
+geometry, unusable lighting), it is excluded and the remaining weights are
+renormalized. If too much of the scan is unreliable, FlexScan shows
+**"Unable to obtain a reliable scan - adjust position/lighting and try
+again."** instead of producing a misleading score.
 
 **These weights and ranges are heuristic engineering choices for a visual
-computer-vision demo — they are not medical or scientific standards.**
+computer-vision demo - they are not medical or scientific standards.**
 
 ## Troubleshooting
 
@@ -205,10 +242,11 @@ computer-vision demo — they are not medical or scientific standards.**
 | Download failure | Check your internet connection. If the model name has changed, update the filenames in `app/config.py`. |
 | Poor lighting / low definition score | Use even, diffuse lighting facing your arm; avoid strong backlight or deep shadows. |
 | Arm not detected | Make sure your shoulder, elbow, and wrist are all visible in frame, and step back so the whole upper arm is in view. |
-| Low FPS | Close other apps using the camera/GPU; a smaller `yolov8n` model already runs on CPU, but a GPU will speed it up further. |
+| "Unable to obtain a reliable scan" | The captured frames failed the reliability gates. Even out the lighting, keep the arm fully in frame, hold still while the frames collect, and avoid leaning toward or away from the camera between the relaxed and flexed phases. |
+| Low FPS | Close other apps using the camera or GPU; a smaller `yolov8n` model already runs on CPU, but a GPU will speed it up further. |
 
 ## Privacy
 
 All webcam processing happens **locally** on your machine. FlexScan does
-not upload video, images, or measurements anywhere — the only network
+not upload video, images, or measurements anywhere - the only network
 access it uses is the one-time model download in `download_models.py`.
