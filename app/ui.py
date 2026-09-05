@@ -187,6 +187,13 @@ def draw_status(frame: np.ndarray, session: ScanSession, status_text: str) -> No
     tx = w - tsize[0] - 16
     cv2.putText(frame, controls, (tx, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, GRAY, 1, cv2.LINE_AA)
 
+    # Calibration status on the right, under the controls
+    if session.reference_cm:
+        cal = f"Cal: arm {session.reference_cm:.1f} cm - ESTIMATED"
+    else:
+        cal = "Cal: relative only (set arm length)"
+    cv2.putText(frame, cal, (tx, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.45, ACCENT if session.reference_cm else GRAY, 1, cv2.LINE_AA)
+
 
 def draw_result(frame: np.ndarray, result: ScanResult) -> None:
     h, w = frame.shape[:2]
