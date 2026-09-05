@@ -46,6 +46,13 @@ def _normalize(value: Optional[float], key: str) -> Optional[float]:
     return normalized * (config.SCORE_MAX - config.SCORE_MIN) + config.SCORE_MIN
 
 
+def _phase_geometry_changed(r_length: Optional[float], f_length: Optional[float]) -> bool:
+    """True when the arm scaled too much between phases (user moved, not flexed)."""
+    if not r_length or not f_length:
+        return False
+    return abs(r_length - f_length) / max(r_length, f_length) > config.MAX_PHASE_GEOMETRY_CHANGE
+
+
 def compute_component_scores(
     relaxed: Dict[str, float], flexed: Dict[str, float]
 ) -> ComponentScores:

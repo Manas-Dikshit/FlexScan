@@ -117,11 +117,14 @@ class ScanSession:
         if self.arm_side is None:
             self.arm_side = arm.side
 
-        stable = self.is_arm_stable(arm.elbow)
+        stable = self.is_arm_stable(arm)
         if not stable:
             if self._phase_timed_out():
                 self.last_error = "Timed out waiting for a stable arm position."
             return "Hold still..."
+
+        if self._is_arm_length_outlier(buffer, arm):
+            return f"Frames: {len(buffer)}/{config.REQUIRED_STABLE_FRAMES}"
 
         # Build arm region for visualization (update each frame for accuracy)
         self.current_arm_region = build_arm_region(frame, arm)
@@ -138,6 +141,15 @@ class ScanSession:
             return "Captured."
 
         return f"Frames: {len(buffer)}/{config.REQUIRED_STABLE_FRAMES}"
+
+    def _is_arm_length_outlier(self, buffer: List[FrameMeasurement], arm: ArmPose) -> bool:
+        lengths = [m.arm_length for m in buffer if m.arm_length]
+        if len(lengths) < 2:
+            return False
+        med = float(np.median(lengths))
+        if med < 1e-3:
+            return False
+        return abs(arm.upper_arm_length - med) / med > config.ARM_LENGTH_JITTER_FRACTION
 
     def _finish_relaxed(self) -> None:
         aggregate, reliable, reason = aggregate_measurements(self.relaxed_measurements)
