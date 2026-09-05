@@ -224,6 +224,32 @@ def draw_result(frame: np.ndarray, result: ScanResult) -> None:
     def fmt(v):
         return f"{v:.1f}" if v is not None else "n/a"
 
+    # Estimated physical dimensions block
+    if result.physical is not None:
+        ph = result.physical
+        y += 4
+        if ph.calibrated:
+            cv2.putText(frame, "ESTIMATED WIDTHS (cm)", (x0 + 16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, ACCENT, 1, cv2.LINE_AA)
+            y += 22
+            phys_rows = [
+                ("Max width   R/F", f"{fmt(ph.relaxed_max_cm)} / {fmt(ph.flexed_max_cm)}"),
+                ("Avg width    R/F", f"{fmt(ph.relaxed_mean_cm)} / {fmt(ph.flexed_mean_cm)}"),
+                ("Flex change (max)", f"{ph.change_max_cm:+.2f}" if ph.change_max_cm is not None else "n/a"),
+                ("Flex change (avg)", f"{ph.change_mean_cm:+.2f}" if ph.change_mean_cm is not None else "n/a"),
+            ]
+            for lab, val in phys_rows:
+                cv2.putText(frame, lab, (x0 + 16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 1, cv2.LINE_AA)
+                tsize = cv2.getTextSize(val, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+                cv2.putText(frame, val, (x0 + panel_w - 16 - tsize[0] - 16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, GREEN, 1, cv2.LINE_AA)
+                y += 24
+            method = f"Scale: your upper-arm length {ph.reference_cm:.1f} cm"
+            cv2.putText(frame, method, (x0 + 16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, GRAY, 1, cv2.LINE_AA)
+            y += 24
+        else:
+            cv2.putText(frame, "No arm-length reference - relative only", (x0 + 16, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, GRAY, 1, cv2.LINE_AA)
+            y += 24
+
     c = result.components
     rows = [
         ("Peak Bulge", fmt(c.peak_bulge)),
