@@ -93,6 +93,12 @@ def test_measure_definition_none_for_empty_mask():
     assert measure_definition(roi, mask) is None
 
 
+def test_measure_definition_adaptive_thresholds_on_uniform_bright_region():
+    mask = np.ones((100, 100), dtype=np.uint8) * 255
+    bright = np.full((100, 100, 3), 240, dtype=np.uint8)
+    assert measure_definition(bright, mask) == 0.0
+
+
 # ---------------------------------------------------------------------------
 # measure_shape
 # ---------------------------------------------------------------------------
