@@ -14,7 +14,7 @@ backlight do not wreck the boundary estimate.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -46,18 +46,35 @@ class MattingModel:
             self._available = False
         return self._available
 
-    def matte_crop(self, frame: np.ndarray) -> Optional[np.ndarray]:
+    def matte_crop(self, frame: np.ndarray, box: Optional[Tuple[int, int, int, int]] = None) -> Optional[np.ndarray]:
         """
         Return a full-frame soft alpha (float32, 0..1) of the foreground.
-        The arm region is matted within a cropped box so the model sees the
-        subject at a useful scale and runs faster. None on failure.
+        If `box` (x, y, w, h) is given, only that region is matted so the
+        subject fills the model input. None on failure.
         """
         if not self._ensure_loaded():
             return None
         h, w = frame.shape[:2]
         size = config.MATTING_INPUT_SIZE
+
+        crop = frame
+        ox = oy = 0
+        cw, ch = w, h
+        if box is not None:
+            bx, by, bw0, bh0 = box
+            pad_x = int(bw0 * 0.2)
+            pad_y = int(bh0 * 0.2)
+            ox = max(0, bx - pad_x)
+            oy = max(0, by - pad_y)
+            x2 = min(w, bx + bw0 + pad_x)
+            y2 = min(h, by + bh0 + pad_y)
+            if x2 - ox < 16 or y2 - oy < 16:
+                return None
+            crop = frame[oy:y2, ox:x2]
+            cw, ch = crop.shape[1], crop.shape[0]
+
         try:
-            resized = cv2.resize(frame, (size, size))
+            resized = cv2.resize(crop, (size, size))
             blob = resized.astype(np.float32) / 255.0
             blob = blob.transpose(2, 0, 1)[None]
             mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 3, 1, 1)
@@ -70,8 +87,11 @@ class MattingModel:
         if out.min() < 0.0 or out.max() > 1.0:
             out = 1.0 / (1.0 + np.exp(-out))
         alpha = np.clip(out, 0.0, 1.0)
-        alpha = cv2.resize(alpha, (w, h), interpolation=cv2.INTER_LINEAR)
-        return alpha.astype(np.float32)
+        alpha = cv2.resize(alpha, (cw, ch), interpolation=cv2.INTER_LINEAR)
+
+        full = np.zeros((h, w), dtype=np.float32)
+        full[oy:oy + ch, ox:ox + cw] = alpha
+        return full
 
     def _input_name(self) -> str:
         inp = self._session.get_inputs()[0]
