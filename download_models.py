@@ -8,7 +8,7 @@ Usage:
 Model sources and licenses:
     - yolov8n-pose.pt    -- Ultralytics (AGPL-3.0), required
     - yolov8n-seg.pt     -- Ultralytics (AGPL-3.0), optional arm isolation
-    - modnet_photographic.onnx -- MOdesNet portrait matting, Apache-2.0,
+    - modnet_photographic.onnx -- MODNet portrait matting, Apache-2.0,
       hosted on Hugging Face (Xenova/modnet). Improves the arm boundary
       under varied lighting; FlexScan falls back to the seg model, then
       GrabCut, if it is missing.
