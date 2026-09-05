@@ -240,3 +240,14 @@ def test_analyze_frame_is_lighting_robust():
     result = analyze_frame(frame, arm)
     assert result is not None
     assert result.reliable or "segment" in result.reason or "Lighting" in result.reason
+
+
+def test_luminance_gate_uses_foreground_pixels_only():
+    # Bright arm in a large dark room: mean over the whole frame would sit near
+    # 0 and falsely trip the "too dark" gate; foreground-only mean must pass.
+    frame = np.full((240, 240, 3), 20, dtype=np.uint8)  # dark background
+    cv2.rectangle(frame, (60, 90), (200, 150), (150, 150, 150), -1)  # bright arm
+    arm = make_arm(shoulder=(60, 120), elbow=(200, 120), wrist=(210, 160))
+    result = analyze_frame(frame, arm)
+    assert result is not None
+    assert "Lighting" not in result.reason
