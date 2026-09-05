@@ -280,14 +280,20 @@ def measure_slice_widths(mask: np.ndarray, region: ArmRegion) -> List[ArmSlice]:
     return measured_slices
 
 
+def _masked_luminance_stats(gray: np.ndarray, mask: np.ndarray) -> Tuple[float, float]:
+    """Mean/std of gray levels over the masked foreground pixels only (not the black background)."""
+    vals = gray[mask > 0]
+    if vals.size == 0:
+        return 0.0, 0.0
+    return float(vals.mean()), float(vals.std())
+
+
 def measure_definition(frame: np.ndarray, mask: np.ndarray) -> Optional[float]:
     """Edge density inside the masked arm region, with lighting-adaptive thresholds."""
     if mask.sum() == 0:
         return None
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    masked = cv2.bitwise_and(gray, gray, mask=mask)
-    mean_lum = float(masked.mean())
-    sigma = float(masked.std())
+    mean_lum, sigma = _masked_luminance_stats(gray, mask)
     lo = int(max(0.0, mean_lum - config.CANNY_EDGE_SIGMA * sigma))
     hi = int(min(255.0, mean_lum + config.CANNY_EDGE_SIGMA * sigma))
     if hi - lo < 1:
@@ -392,7 +398,7 @@ def analyze_frame(
     peak_bulge = max(norm_widths)
 
     gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
-    roi_lum = float(cv2.bitwise_and(gray, gray, mask=mask).mean())
+    roi_lum, _ = _masked_luminance_stats(gray, mask)
     if not (config.MIN_AVG_LUMINANCE <= roi_lum <= config.MAX_AVG_LUMINANCE):
         return FrameMeasurement(
             peak_bulge=None, definition=None, shape=None, curvature=None,
