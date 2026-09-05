@@ -15,6 +15,8 @@ from app.arm_analysis import (
     measure_shape,
     measure_curvature,
     measure_slice_widths,
+    normalize_illumination,
+    widths_to_cm,
     analyze_frame,
 )
 from app.pose import ArmPose

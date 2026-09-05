@@ -124,3 +124,44 @@ def test_score_scan_end_to_end():
     result = score_scan(relaxed, flexed)
     assert result.overall_score is not None
     assert 1 <= len(result.advice) <= 3
+
+
+def test_physical_dimensions_calibrated_conversion():
+    # widths_cm already converted; scoring just selects/aggregates them
+    relaxed = {"peak_bulge": 0.30, "definition": 0.05, "shape": 0.7, "curvature": 0.05,
+               "max_width_cm": 11.2, "mean_width_cm": 10.0}
+    flexed = {"peak_bulge": 0.50, "definition": 0.10, "shape": 0.8, "curvature": 0.10,
+              "max_width_cm": 14.0, "mean_width_cm": 12.5}
+    result = score_scan(relaxed, flexed, reference_cm=30.0)
+    ph = result.physical
+    assert ph is not None
+    assert ph.calibrated is True
+    assert ph.relaxed_max_cm == 11.2
+    assert ph.flexed_max_cm == 14.0
+    assert abs(ph.change_max_cm - 2.8) < 1e-9
+    assert abs(ph.change_mean_cm - 2.5) < 1e-9
+    assert "not medical" in result.measurement_note
+
+
+def test_physical_dimensions_not_calibrated_without_reference():
+    relaxed = {"peak_bulge": 0.30, "definition": 0.05, "shape": 0.7, "curvature": 0.05,
+               "max_width_cm": 11.2, "mean_width_cm": 10.0}
+    flexed = {"peak_bulge": 0.50, "definition": 0.10, "shape": 0.8, "curvature": 0.10,
+              "max_width_cm": 14.0, "mean_width_cm": 12.5}
+    result = score_scan(relaxed, flexed)
+    ph = result.physical
+    assert ph is not None
+    assert ph.calibrated is False
+    assert ph.change_max_cm is None
+    assert "No arm-length reference" in result.measurement_note
+
+
+def test_physical_dimensions_none_values_never_invent_widths():
+    relaxed = {"peak_bulge": 0.30, "definition": 0.05, "shape": 0.7, "curvature": 0.05}
+    flexed = {"peak_bulge": 0.50, "definition": 0.10, "shape": 0.8, "curvature": 0.10}
+    result = score_scan(relaxed, flexed, reference_cm=30.0)
+    ph = result.physical
+    assert ph is not None
+    assert ph.calibrated is False
+    assert ph.relaxed_max_cm is None
+    assert ph.flexed_max_cm is None
