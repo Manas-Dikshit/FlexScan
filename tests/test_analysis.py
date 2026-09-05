@@ -135,17 +135,19 @@ def test_measure_curvature_returns_value_for_enough_slices():
 def test_aggregate_measurements_uses_median_of_reliable_frames():
     frames = [
         FrameMeasurement(peak_bulge=0.30, definition=0.05, shape=0.70, curvature=0.01,
-                         width_profile=[0.2, 0.3, 0.25], reliable=True),
+                         width_profile=[0.2, 0.3, 0.25], reliable=True, arm_length=150.0),
         FrameMeasurement(peak_bulge=0.32, definition=0.06, shape=0.72, curvature=0.012,
-                         width_profile=[0.21, 0.31, 0.26], reliable=True),
+                         width_profile=[0.21, 0.31, 0.26], reliable=True, arm_length=150.5),
         FrameMeasurement(peak_bulge=0.31, definition=0.055, shape=0.71, curvature=0.011,
-                         width_profile=[0.205, 0.305, 0.255], reliable=True),
+                         width_profile=[0.205, 0.305, 0.255], reliable=True, arm_length=149.8),
         FrameMeasurement(None, None, None, None, None, reliable=False, reason="seg failed"),
     ]
     aggregate, reliable, reason = aggregate_measurements(frames)
     assert reliable is True
     assert aggregate is not None
     assert 0.29 < aggregate["peak_bulge"] < 0.33
+    assert aggregate["arm_length"] is not None
+    assert abs(aggregate["arm_length"] - 150.0) < 1.0
 
 
 def test_aggregate_measurements_fails_with_too_few_reliable_frames():

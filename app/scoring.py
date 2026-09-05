@@ -68,32 +68,29 @@ def compute_component_scores(
     if peak_bulge_score is None:
         unreliable.append("peak_bulge")
 
-    # Flex change: difference in peak bulge between relaxed and flexed
+    # Flex change: median of real measured differences between relaxed and
+    # flexed normalized widths, using the peak slice and the full width profile.
     flex_change_raw = None
     r_bulge = relaxed.get("peak_bulge")
     f_bulge = flexed.get("peak_bulge")
-    if r_bulge is not None and f_bulge is not None:
-        flex_change_raw = f_bulge - r_bulge
+    r_profile = relaxed.get("width_profile")
+    f_profile = flexed.get("width_profile")
+    geometry_ok = not _phase_geometry_changed(
+        relaxed.get("arm_length"), flexed.get("arm_length")
+    )
+    measures = []
+    if geometry_ok and r_bulge is not None and f_bulge is not None:
+        measures.append(f_bulge - r_bulge)
+    if (geometry_ok and r_profile is not None and f_profile is not None
+            and len(r_profile) == len(f_profile) and len(r_profile) >= 2):
+        r_arr = np.array(r_profile, dtype=np.float64)
+        f_arr = np.array(f_profile, dtype=np.float64)
+        measures.append(float(np.median(f_arr - r_arr)))
+    if measures:
+        flex_change_raw = float(np.median(measures))
     flex_change_score = _normalize(flex_change_raw, "flex_change")
     if flex_change_score is None:
         unreliable.append("flex_change")
-
-    # Width-profile comparison: additional robustness from multi-slice data
-    r_profile = relaxed.get("width_profile")
-    f_profile = flexed.get("width_profile")
-    if r_profile is not None and f_profile is not None and len(r_profile) == len(f_profile):
-        r_arr = np.array(r_profile, dtype=np.float64)
-        f_arr = np.array(f_profile, dtype=np.float64)
-        # Mean relative increase across all slices
-        with np.errstate(divide="ignore", invalid="ignore"):
-            rel_change = np.where(r_arr > 1e-6, (f_arr - r_arr) / r_arr, 0.0)
-        mean_rel_change = float(np.median(rel_change))
-        # If profile-based change is available and more reliable, use it to boost confidence
-        if flex_change_raw is not None and mean_rel_change > flex_change_raw:
-            # Profile analysis found more change than peak-only
-            profile_boost = min(0.05, (mean_rel_change - flex_change_raw) * 0.1)
-            flex_change_raw = min(flex_change_raw + profile_boost, config.NORMALIZATION_RANGES["flex_change"][1])
-            flex_change_score = _normalize(flex_change_raw, "flex_change")
 
     # Definition: from flexed state
     definition_raw = flexed.get("definition")
