@@ -47,7 +47,11 @@ class FlexScanApp:
     def _on_analyze(self):
         self.session.proceed_to_analyze()
         if self.session.relaxed_aggregate and self.session.flexed_aggregate:
-            self.result = score_scan(self.session.relaxed_aggregate, self.session.flexed_aggregate)
+            self.result = score_scan(
+                self.session.relaxed_aggregate,
+                self.session.flexed_aggregate,
+                self.session.reference_cm,
+            )
         else:
             from app.scoring import ScanResult, ComponentScores
             self.result = ScanResult(
@@ -64,6 +68,31 @@ class FlexScanApp:
 
     def _on_quit(self):
         self._quit = True
+
+    def _setup_reference_length(self) -> None:
+        """Ask for one reference measurement (upper-arm length in cm) if not set."""
+        if self.session.reference_cm is not None:
+            print(
+                "[FlexScan] Calibration: "
+                f"upper-arm length = {self.session.reference_cm:.1f} cm "
+                "(set via FLEXSCAN_UPPER_ARM_LENGTH_CM or config)."
+            )
+            return
+        print("[FlexScan] Optional calibration. Enter your upper-arm length")
+        print("[FlexScan] (shoulder to elbow) in cm. Blank = relative score only.")
+        try:
+            raw = input("[FlexScan] Upper-arm length (cm): ").strip()
+        except EOFError:
+            raw = ""
+        try:
+            value = float(raw)
+        except ValueError:
+            value = 0.0
+        if value > 0:
+            self.session.reference_cm = value
+            print(f"[FlexScan] Calibration set: {value:.1f} cm.")
+        else:
+            print("[FlexScan] No reference set - widths will not be estimated.")
 
     def _rebuild_buttons(self, frame_w: int, frame_h: int) -> None:
         buttons = []
@@ -85,6 +114,8 @@ class FlexScanApp:
             self.buttons.handle_click(x, y)
 
     def run(self) -> int:
+        self._setup_reference_length()
+
         try:
             self.camera.open()
         except CameraError as e:
