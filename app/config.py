@@ -14,6 +14,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env")
+except Exception:
+    pass
+
 # ---------------------------------------------------------------------------
 # Model sources
 # ---------------------------------------------------------------------------
@@ -21,6 +27,13 @@ MODEL_FILENAME = "yolov8n-pose.pt"
 SEG_MODEL_FILENAME = "yolov8n-seg.pt"
 POSE_MODEL_PATH = MODELS_DIR / MODEL_FILENAME
 SEG_MODEL_PATH = MODELS_DIR / SEG_MODEL_FILENAME
+
+MATTING_MODEL_FILENAME = "modnet_photographic.onnx"
+MATTING_MODEL_PATH = MODELS_DIR / MATTING_MODEL_FILENAME
+MATTING_MODEL_URL = "https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx"
+MATTING_MODEL_LICENSE = "Apache-2.0"
+MATTING_INPUT_SIZE = 384
+MATTING_THRESHOLD = 0.5
 
 # ---------------------------------------------------------------------------
 # Pose detection
@@ -81,6 +94,15 @@ MIN_ARM_LENGTH_PX = 60
 MIN_AVG_LUMINANCE = 55      # arm ROI mean gray level; below = too dark
 MAX_AVG_LUMINANCE = 235     # arm ROI mean gray level; above = overexposed
 CANNY_EDGE_SIGMA = 2.5      # auto edge thresholds: mean +/- sigma * std of arm ROI
+CLAHE_CLIP_LIMIT = 2.0      # illumination-normalization contrast limit
+CLAHE_TILE_SIZE = 8         # illumination-normalization CLAHE tile size
+
+# ---------------------------------------------------------------------------
+# Calibration / physical measurements
+# ---------------------------------------------------------------------------
+# User-provided upper-arm length (shoulder to elbow) in cm. Used to convert
+# pixel widths into estimated cm. 0 = not calibrated (relative score only).
+UPPER_ARM_LENGTH_CM = float(os.environ.get("FLEXSCAN_UPPER_ARM_LENGTH_CM", "0"))
 
 # ---------------------------------------------------------------------------
 # Arm region of interest
