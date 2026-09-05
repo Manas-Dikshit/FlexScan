@@ -1,5 +1,12 @@
 # FlexScan - AI Biceps Visual Analysis
 
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?style=flat&logo=opencv&logoColor=white)
+![NumPy](https://img.shields.io/badge/NumPy-2.x-013243?style=flat&logo=numpy&logoColor=white)
+![Ultralytics YOLO](https://img.shields.io/badge/Ultralytics%20YOLO-8-00FFFF?style=flat&logo=yolo&logoColor=black)
+![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-1.x-005BED?style=flat&logo=onnx&logoColor=white)
+![Hugging Face](https://img.shields.io/badge/Hugging%20Face-MODNet-FFD21E?style=flat&logo=huggingface&logoColor=black)
+
 ## Project overview
 
 FlexScan is a local computer-vision application that watches your upper arm
@@ -299,3 +306,7 @@ computer-vision demo - they are not medical or scientific standards.**
 All webcam processing happens **locally** on your machine. FlexScan does
 not upload video, images, or measurements anywhere - the only network
 access it uses is the one-time model download in `download_models.py`.
+
+---
+
+Made by MRD with ❤️
