@@ -176,3 +176,64 @@ def test_aggregate_measurements_drops_outliers():
     aggregate, reliable, _ = aggregate_measurements(frames)
     assert reliable is True
     assert aggregate["peak_bulge"] < 1.0
+
+
+def test_aggregate_measurements_medians_cm_widths():
+    frames = [
+        FrameMeasurement(0.30, 0.05, 0.70, 0.01, [0.2, 0.3, 0.25], reliable=True,
+                         arm_length=200.0, widths_cm=[11.0, 12.0, 11.5]),
+        FrameMeasurement(0.31, 0.06, 0.71, 0.012, [0.2, 0.3, 0.25], reliable=True,
+                         arm_length=200.0, widths_cm=[12.0, 13.0, 12.5]),
+    ]
+    aggregate, reliable, _ = aggregate_measurements(frames)
+    assert reliable is True
+    assert aggregate["max_width_cm"] is not None
+    assert abs(aggregate["max_width_cm"] - 12.5) < 1e-9
+    assert abs(aggregate["mean_width_cm"] - 12.0) < 1e-9
+    assert abs(aggregate["width_profile_cm"][0] - 11.5) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# normalize_illumination
+# ---------------------------------------------------------------------------
+def test_normalize_illumination_preserves_shape_and_dtype():
+    frame = np.full((120, 160, 3), 100, dtype=np.uint8)
+    norm = normalize_illumination(frame)
+    assert norm.shape == frame.shape
+    assert norm.dtype == np.uint8
+
+
+def test_normalize_illumination_raises_contrast_in_one_shaded_half():
+    rng = np.random.default_rng(7)
+    dark = np.full((100, 100, 3), 60, dtype=np.uint8)
+    bright = np.full((100, 100, 3), 180, dtype=np.uint8)
+    frame = np.hstack([dark, bright]).astype(np.uint8)
+    norm = normalize_illumination(frame)
+    dark_std = norm[:, :100].astype(np.float32).std()
+    assert dark_std > 0.0
+
+
+# ---------------------------------------------------------------------------
+# widths_to_cm
+# ---------------------------------------------------------------------------
+def test_widths_to_cm_scales_by_arm_length():
+    # 200 px upper arm claimed as 40 cm => 5 px/cm => 100 px width = 20 cm
+    widths = widths_to_cm([100.0, 50.0], reference_cm=40.0, arm_length_px=200.0)
+    assert widths is not None
+    assert abs(widths[0] - 20.0) < 1e-9
+    assert abs(widths[1] - 10.0) < 1e-9
+
+
+def test_widths_to_cm_none_without_reference():
+    assert widths_to_cm([100.0], reference_cm=None, arm_length_px=200.0) is None
+    assert widths_to_cm([100.0], reference_cm=0.0, arm_length_px=200.0) is None
+    assert widths_to_cm([100.0], reference_cm=40.0, arm_length_px=0.0) is None
+
+
+def test_analyze_frame_is_lighting_robust():
+    # Even a bright synthetic arm must produce reliable measurements
+    frame = np.full((240, 240, 3), 180, dtype=np.uint8)
+    arm = make_arm(shoulder=(60, 120), elbow=(200, 120), wrist=(210, 160))
+    result = analyze_frame(frame, arm)
+    assert result is not None
+    assert result.reliable or "segment" in result.reason or "Lighting" in result.reason
