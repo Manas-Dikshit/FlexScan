@@ -226,9 +226,18 @@ skewing the comparison.
   otherwise distort one of the ten capture frames.
 - **Outlier aggregation** - each component is aggregated with the median after
   discarding 1.5 x IQR outliers; width profiles are medians per slice position.
-- **Lighting tolerance** - edge thresholds are derived from the arm region's
-  mean and standard deviation (`CANNY_EDGE_SIGMA`), and any frame whose arm
-  pixels average too dark or too bright is rejected as unreliable.
+- **Lighting tolerance** - frames are illumination-normalized (CLAHE) first,
+  edge thresholds are derived from the arm region's mean and standard
+  deviation (`CANNY_EDGE_SIGMA`), and any frame whose arm pixels still average
+  too dark or too bright is rejected as unreliable.
+- **Segmentation robustness** - the arm is separated with MODNet portrait
+  matting (soft, lighting-stable alpha), falling back to YOLOv8-seg and then
+  GrabCut. The matting crop is anchored to the pose-derived upper-body box, so
+  pose and segmentation work together.
+- **Honest physical widths** - without a reference arm length no centimetre
+  value is ever displayed; with one, every displayed number is marked
+  "ESTIMATED" and the result panel states that it is a visual estimate, not a
+  medical measurement.
 - **Phase consistency guard** - if the arm length changed by more than 35%
   between the relaxed and flexed phases, the user moved relative to the
   camera, so the Flex Response component is marked unreliable rather than
