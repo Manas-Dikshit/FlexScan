@@ -277,6 +277,13 @@ def draw_result(frame: np.ndarray, result: ScanResult) -> None:
             cv2.putText(frame, f"- {w_line}", (x0 + 16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 1, cv2.LINE_AA)
             y += 22
 
+    # Honesty note (estimated, not a medical measurement)
+    if result.measurement_note:
+        y += 6
+        for w_line in _wrap_text(result.measurement_note, 40)[:4]:
+            cv2.putText(frame, w_line, (x0 + 16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, GRAY, 1, cv2.LINE_AA)
+            y += 16
+
 
 def _wrap_text(text: str, max_chars: int) -> List[str]:
     words = text.split()
