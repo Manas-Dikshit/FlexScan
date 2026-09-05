@@ -195,14 +195,15 @@ built around the arm axis (shoulder to elbow) and tapers from a wider
 mid-bicep belly toward the narrower shoulder and elbow ends, giving a more
 anatomically accurate region. The polygon is shown in real time on the feed.
 
-### Dense measurement slices
+### Dense measurement slices and estimated widths
 
 Inside the arm region, multiple **perpendicular cross-section lines** are
 generated along the shoulder-elbow axis. Each slice measures the foreground
 width of the arm at that position, and these are shown as orange measurement
 lines with green edge dots during scanning. Because the slices are anchored to
 the live shoulder-elbow geometry, they follow the actual arm outline even
-when it moves slightly between frames.
+when it moves slightly between frames. When calibration is enabled, the same
+slice widths are converted to centimetres for the result panel.
 
 ### Distance and size normalization
 
