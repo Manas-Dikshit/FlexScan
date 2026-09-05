@@ -52,6 +52,27 @@ def test_compute_component_scores_missing_relaxed_peak_bulge():
     assert components.peak_bulge is not None
 
 
+def test_flex_change_uses_median_of_real_peak_and_profile_measures():
+    relaxed = {"peak_bulge": 0.30, "definition": 0.05, "shape": 0.7, "curvature": 0.05,
+               "width_profile": [0.24, 0.30, 0.36], "arm_length": 150.0}
+    flexed = {"peak_bulge": 0.38, "definition": 0.10, "shape": 0.8, "curvature": 0.10,
+              "width_profile": [0.32, 0.38, 0.44], "arm_length": 150.5}
+    components = compute_component_scores(relaxed, flexed)
+    assert components.flex_change is not None
+    assert abs(components.flex_change - _normalize(0.08, "flex_change")) < 1e-6
+
+
+def test_flex_change_unreliable_when_phase_geometry_changed():
+    relaxed = {"peak_bulge": 0.30, "definition": 0.05, "shape": 0.7, "curvature": 0.05,
+               "arm_length": 100.0}
+    flexed = {"peak_bulge": 0.50, "definition": 0.10, "shape": 0.8, "curvature": 0.10,
+              "arm_length": 500.0}
+    components = compute_component_scores(relaxed, flexed)
+    assert components.flex_change is None
+    assert "flex_change" in components.unreliable
+    assert components.peak_bulge is not None
+
+
 def test_overall_score_within_bounds():
     relaxed = {"peak_bulge": 0.30, "definition": 0.05, "shape": 0.7, "curvature": 0.05}
     flexed = {"peak_bulge": 0.55, "definition": 0.15, "shape": 0.85, "curvature": 0.12}
