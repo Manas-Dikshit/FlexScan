@@ -61,22 +61,7 @@ def main():
         if arm is None:
             print("no usable arm (conf/low length). confs:", pose.upper_body.confidences)
             return
-        from app.arm_analysis import normalize_illumination
-        work = normalize_illumination(frame)
-        region = build_arm_region(work, arm)
-        print("region:", "None" if region is None else (len(region.slices), round(region.arm_length, 1)))
-        if region is None:
-            return
-        box = session._person_box(pose, frame.shape[:2])
-        print("person_box:", box)
-        mask = segment_arm_region(work, region, box)
-        print("mask:", "None" if mask is None else (mask.dtype, mask.shape, int(mask.sum() // 255)))
-        if mask is not None:
-            gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
-            roi = cv2.bitwise_and(gray, gray, mask=mask)
-            print("roi lum min/max/mean:", int(roi[roi > 0].min()), int(roi[roi > 0].max()),
-                  round(float(roi[roi > 0].mean()), 1))
-            from app.arm_analysis import measure_definition, measure_shape, measure_curvature
+        from app.arm_analysis import measure_definition, measure_shape, measure_curvature
             slices = measure_slice_widths(mask, region)
             print("slices:", None if not slices else len(slices), "nonempty:", sum(1 for s in slices if s.width_px > 0))
             if slices:
